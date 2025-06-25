@@ -1,0 +1,2991 @@
+==> about_us.php <===
+<?php include "commonassets/header.php"; ?>
+
+    <!-- Main Content -->
+    <div class="content">
+        <br>
+        <h1>About Us</h1>
+
+        <h2>Introduction to the Project</h2>
+        <p>The <strong>Integrated Road Transport and Licensing System (IRTLS)</strong> is a comprehensive web-based platform designed to streamline road transportation and licensing activities. It enables users to access and manage critical vehicle and license information, including insurance records and violation history. Additionally, it provides authorized personnel such as RTO officials and law enforcement agencies with a robust system for regulatory oversight.</p>
+
+        <h2>Why IRTLS Matters</h2>
+        <p>Many road transport management systems exist, but they are often fragmented across different platforms, making it difficult for users and regulatory bodies to efficiently access consolidated information. The IRTLS solves this by offering a <strong>unified government-provided platform</strong>, ensuring data accuracy, ease of use, and improved efficiency in transportation management.</p>
+
+        <h2>How IRTLS Works</h2>
+        <p>The system operates in two primary modules:</p>
+        <ul>
+            <li><strong>User Module:</strong> Allows citizens to view vehicle details, check license and insurance status, renew certificates, and manage violations.</li>
+            <li><strong>Administrator Module:</strong> Designed for RTO officials and law enforcement agencies to oversee vehicle registration, issue penalties, manage complaints, and track violation records.</li>
+        </ul>
+
+        <h2>Our Key Functionalities</h2>
+        <p>The IRTLS provides various features to improve road transportation services, including:</p>
+        <ul>
+            <li>Accessing detailed vehicle information</li>
+            <li>Checking and renewing licenses and insurance</li>
+            <li>Managing violations and paying fines</li>
+            <li>Registering new vehicles and drivers</li>
+            <li>Tracking and reporting violations</li>
+            <li>Ensuring centralized and up-to-date records</li>
+        </ul>
+
+        <h2>Why IRTLS is Important</h2>
+        <p>The IRTLS plays a crucial role in improving the transparency and efficiency of transportation governance. By centralizing all services, it ensures real-time access to data, reducing errors and paperwork while providing a seamless experience for both citizens and regulatory bodies. The system ultimately contributes to better road safety and organized traffic management.</p>
+    </div>
+<?php include "commonassets/footer.php"; ?>
+<style>
+    /* Ensure content is not hidden behind the fixed header */
+.content {
+    padding-top: 24px;
+    padding-left: 10%;
+    padding-right: 10%;
+    padding-bottom: 24px;
+    text-align: justify;
+}
+
+/* Styling for the About Us page */
+.content h1 {
+    text-align: center;
+    font-size: 32px;
+    color: #003366;
+    margin-bottom: 20px;
+}
+
+.content h2 {
+    font-size: 24px;
+    color: #007bff;
+    margin-top: 20px;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 5px;
+}
+
+.content p {
+    font-size: 18px;
+    color: #333;
+    line-height: 1.6;
+    margin-bottom: 15px;
+}
+
+.content ul {
+    font-size: 18px;
+    margin-left: 20px;
+    color: #333;
+}
+
+.content ul li {
+    margin-bottom: 10px;
+}
+</style>
+
+===== END OF FILE =====
+
+==> actions/admin/adminloginhandler.php <===
+<?php
+session_start();
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    $conn = mysqli_connect("127.0.0.1","root","SQLroot@MySQL","IRTLS");
+    $query = "SELECT * FROM Administrator WHERE UserID='$username' ";
+    $result = mysqli_query($conn, $query);
+
+    if (mysqli_num_rows($result)>0) {
+        // Fetching the password...
+        $query = "SELECT * FROM Administrator WHERE UserID='$username';";
+        $passresult = mysqli_query($conn, $query);
+        if (mysqli_num_rows($result)>0){
+            $row = mysqli_fetch_assoc($result);
+            $hashedPassword = $row["Password"];
+            $authtype = $row["AuthorityType"];
+        }
+        if (password_verify($password, $hashedPassword)) {
+            setcookie("uname", $username, time()+3600, "/");
+            if ($authtype == 'Insurer') {
+                header("Location: ../../admin/insurer/insurance_info.php");
+            }
+            elseif ($authtype == 'Pollution') {
+                header("Location: ../../admin/testingcentre/vehicle_pollution.php");
+            }
+            elseif ($authtype == 'RTO') {
+                header("Location: ../../admin/rto/dashboard.php");
+            }
+
+            exit();
+        } else {
+            $_SESSION['login_error'] = "Incorrect Password";
+            header("Location: ../user_login.php");
+            exit();
+        }
+
+    } else {
+        $_SESSION['login_error'] = "User not found";
+        header("Location: ../user_login.php");
+        exit();
+    }
+}
+?>
+
+===== END OF FILE =====
+
+==> actions/admin/adminregistrationhandler.php <===
+<?php
+// Database connection
+$conn = mysqli_connect("127.0.0.1", "root", "SQLroot@MySQL", "IRTLS");
+
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Prepare and bind
+$query = "INSERT INTO Administrator (UserID, Password, Name, AuthorityType) VALUES (?, ?, ?, ?)";
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+    // Hash password for security
+    $hashedPassword = password_hash($_POST['password'], PASSWORD_DEFAULT);
+
+    mysqli_stmt_bind_param($stmt, "ssss",
+        $_POST['username'],
+        $hashedPassword,
+        $_POST['fullname'],
+        $_POST['authority_type']
+    );
+
+    if (mysqli_stmt_execute($stmt)) {
+        echo "Registration successful! <a href='../../admin/admin_login.php'>Login here</a>";
+    } else {
+        echo "Error: " . mysqli_stmt_error($stmt);
+    }
+    mysqli_stmt_close($stmt);
+} else {
+    echo "Error preparing statement: " . mysqli_error($conn);
+}
+
+mysqli_close($conn);
+?>
+
+===== END OF FILE =====
+
+==> actions/admin/complaintmgmt.php <===
+<?php
+// Database connection
+$conn = mysqli_connect("127.0.0.1", "root", "SQLroot@MySQL", "IRTLS");
+
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Retrieve form data
+$complaintNo = $_POST['complaintID'];
+$status = $_POST['status']; // Change this to fetch dynamically if needed
+
+// Insert Query
+$query = "UPDATE Complaints
+    SET Status = ? 
+    WHERE ComplaintID = ?";
+
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+    mysqli_stmt_bind_param($stmt, "si",
+        $status, $complaintNo
+    );
+
+    if (mysqli_stmt_execute($stmt)) {
+        echo "Success!";
+    } else {
+        echo "Error: " . mysqli_stmt_error($stmt);
+    }
+    mysqli_stmt_close($stmt);
+} else {
+    echo "Error preparing statement: " . mysqli_error($conn);
+}
+
+mysqli_close($conn);
+?>
+
+===== END OF FILE =====
+
+==> actions/admin/pollutioncertificate_issue.php <===
+<?php
+// Database connection
+$conn = mysqli_connect("127.0.0.1", "root", "SQLroot@MySQL", "IRTLS");
+
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Retrieve form data
+$registerNo = $_POST['register_no'];
+$testingCenterCode = $_POST['testcode']; // Change this to fetch dynamically if needed
+$dateTime = date("Y-m-d H:i:s");
+$feeCharged = $_POST['fees']; // Set dynamically if needed
+$result = $_POST['result'];
+$validUpto = date("Y-m-d", strtotime("+1 year"));
+
+// Collect values and convert to JSON
+$k_values = json_encode(array_filter([
+    $_POST['k_value1'], $_POST['k_value2'], $_POST['k_value3']
+], fn($value) => $value !== ""));
+
+$idle_rpm = json_encode(array_filter([
+    $_POST['idle_rpm1'], $_POST['idle_rpm2'], $_POST['idle_rpm3']
+], fn($value) => $value !== ""));
+
+$max_rpm = json_encode(array_filter([
+    $_POST['max_rpm1'], $_POST['max_rpm2'], $_POST['max_rpm3']
+], fn($value) => $value !== ""));
+
+$oil_temp = json_encode(array_filter([
+    $_POST['oil_temp1'], $_POST['oil_temp2'], $_POST['oil_temp3']
+], fn($value) => $value !== ""));
+
+// Insert Query
+$query = "INSERT INTO PollutionCertificate
+    (RegisterNo, TestingCenterCode, DateTime, FeeCharged, Result, ValidUpto, K_VALUE, IDLE_RPM, MAX_RPM, OIL_TEMP) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+    mysqli_stmt_bind_param($stmt, "sisissssss",
+        $registerNo, $testingCenterCode, $dateTime, $feeCharged, $result, $validUpto, 
+        $k_values, $idle_rpm, $max_rpm, $oil_temp
+    );
+
+    if (mysqli_stmt_execute($stmt)) {
+        echo "Pollution Certificate Generated Successfully!";
+    } else {
+        echo "Error: " . mysqli_stmt_error($stmt);
+    }
+    mysqli_stmt_close($stmt);
+} else {
+    echo "Error preparing statement: " . mysqli_error($conn);
+}
+
+mysqli_close($conn);
+?>
+
+===== END OF FILE =====
+
+==> actions/admin/vehicleregistrationhandler.php <===
+<?php
+// Database connection
+$conn = mysqli_connect("127.0.0.1", "root", "SQLroot@MySQL", "IRTLS");
+
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Retrieve form data
+$registerNo = $_POST['register_no'];
+$class = $_POST['class_of_vehicle'];
+$makerName = $_POST['maker_name'];
+$modelName = $_POST['model_name'];
+$licenceOwner = $_POST['licence_owner'];
+$colour = $_POST['vehicle_colour'];
+$seatingCapacity = $_POST['seating_capacity'];
+$bodyType = $_POST['body_type'];
+$makeMonthYear = $_POST['make_month_year'];
+$chassisNo = $_POST['chassis_no'];
+$engineNo = $_POST['engine_no'];
+$unladenWeight = $_POST['unladen_weight'];
+$cubicCapacity = $_POST['cubic_capacity'];
+$noOfCylinders = $_POST['no_of_cylinders'];
+$fuel = $_POST['fuel_type'];
+$emissionNorms = $_POST['emission_norms_stage'] . " " . $_POST['emission_norms_level'];
+
+$dateOfRegistration = date("Y-m-d");
+$registrationValidity = date("Y-m-d", strtotime("+15 years")); // Example: 15-year validity
+
+// Insert Query
+$query = "INSERT INTO VehicleInfo 
+    (RegisterNo, MakerName, ModelName, BodyType, MakeMonthYear, SeatingCapacity, EmissionNorms, Fuel, EngineNo, Class, 
+    RegistrationValidity, DateOfRegistration, ChassisNo, NoOfCylinders, Colour, CubicCapacity, UnladenWeight) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+    mysqli_stmt_bind_param($stmt, "sssssisssssssssii",
+        $registerNo, $makerName, $modelName, $bodyType, $makeMonthYear, $seatingCapacity, 
+        $emissionNorms, $fuel, $engineNo, $class, $registrationValidity, $dateOfRegistration, 
+        $chassisNo, $noOfCylinders, $colour, $cubicCapacity, $unladenWeight
+    );
+
+    if (mysqli_stmt_execute($stmt)) {
+        echo "Vehicle Registered Successfully!";
+    } else {
+        echo "Error: " . mysqli_stmt_error($stmt);
+    }
+    mysqli_stmt_close($stmt);
+} else {
+    echo "Error preparing statement: " . mysqli_error($conn);
+}
+
+mysqli_close($conn);
+?>
+
+===== END OF FILE =====
+
+==> actions/fetch_vehicle_info.php <===
+<?php
+    $regno = $_GET['vehicle_id'];
+    $conn = mysqli_connect("localhost","root","SQLroot@MySQL","IRTLS");
+    $query = "SELECT * FROM VehicleInfo WHERE RegisterNo='$regno'";
+    $result = mysqli_query($conn, $query);
+    if (mysqli_num_rows($result)>0){
+        $row = mysqli_fetch_assoc($result);
+        $retRegisterNo = $row["RegisterNo"];
+        $retMakerName = $row["MakerName"];
+        $retModelName = $row["ModelName"];
+        $retBodyType = $row["BodyType"];
+        $retMakeMonthYear = $row["MakeMonthYear"];
+        $retSeatingCapacity = $row["SeatingCapacity"];
+        $retEmissionNorms = $row["EmissionNorms"];
+        $retFuel = $row["Fuel"];
+        $retEngineNo = $row["EngineNo"];
+        $retClass = $row["Class"];
+        $retRegistrationValidity = $row["RegistrationValidity"];
+        $retDateOfRegistration = $row["DateOfRegistration"];
+        $retChassisNo = $row["ChassisNo"];
+        $retNoOfCylinders = $row["NoOfCylinders"];
+        $retColour = $row["Colour"];
+        $retCubicCapacity = $row["CubicCapacity"];
+        $retUnladenWeight = $row["UnladenWeight"];
+    }
+
+    $query = "SELECT * FROM InsuranceDetails WHERE RegisterNo='$regno' ORDER BY IssueDate DESC";
+    $result = mysqli_query($conn, $query);
+    if (mysqli_num_rows($result)>0){
+        $row = mysqli_fetch_assoc($result);
+        $insurance_provider = $row["FinancierName"];
+        $insurance_policy = $row["PackageName"];
+        $insurance_issue = $row["IssueDate"];
+        $insurance_expiry = $row["EndDate"];
+    }
+    else{
+        $insurance_provider = '';
+        $insurance_policy = '';
+        $insurance_issue = '';
+        $insurance_expiry = '';
+    }
+
+    $query = "SELECT * FROM PollutionCertificate WHERE RegisterNo='$regno' ORDER BY DateTime DESC";
+    $result = mysqli_query($conn, $query);
+    if (mysqli_num_rows($result)>0){
+        $row = mysqli_fetch_assoc($result);
+        $pollution_cert = $row["CertificateSlNo"];
+        $pollution_issued = $row["DateTime"];
+        $pollution_expiry = $row["ValidUpto"];
+    }
+    else{
+        $pollution_cert = '';
+        $pollution_issued = '';
+        $pollution_expiry = '';
+    }
+
+    echo json_encode([
+        'registration_no' => $retRegisterNo,
+        'maker_name' => $retMakerName,
+        'model_name' => $retModelName,
+        'body_type' => $retBodyType,
+        'make_month_year' => $retMakeMonthYear,
+        'seating_capacity' => $retSeatingCapacity,
+        'emission_norms' => $retEmissionNorms,
+        'fuel' => $retFuel,
+        'engine_no' => $retEngineNo,
+        'class' => $retClass,
+        'registration_validity' => $retRegistrationValidity,
+        'date_of_registration' => $retDateOfRegistration,
+        'chassis_no' => $retChassisNo,
+        'no_of_cylinders' => $retNoOfCylinders,
+        'colour' => $retColour,
+        'cubic_capacity' => $retCubicCapacity,
+        'unladen_weight' => $retUnladenWeight,
+        'insurance_provider' => $insurance_provider,
+        'insurance_policy' => $insurance_policy,
+        'insurance_expiry' => $insurance_expiry,
+        'insurance_issue' => $insurance_issue,
+        'pollution_cert' => $pollution_cert,
+        'pollution_issued' => $pollution_issued,
+        'pollution_expiry' => $pollution_expiry
+    ]);
+
+
+?>
+
+===== END OF FILE =====
+
+==> actions/userloginhandler.php <===
+<?php
+session_start();
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    $conn = mysqli_connect("127.0.0.1","root","SQLroot@MySQL","IRTLS");
+    if ($conn){
+        echo "<script>alert('Connected Successfully')</script>";
+    } else{
+        echo "<script>alert('Connection Failed')</script>";
+    }
+    $query = "SELECT * FROM CommonUsers WHERE UserID='$username' ";
+    $result = mysqli_query($conn, $query);
+
+    if (mysqli_num_rows($result)>0) {
+        // Fetching the password...
+        $query = "SELECT * FROM CommonUsers WHERE UserID='$username';";
+        $passresult = mysqli_query($conn, $query);
+        if (mysqli_num_rows($result)>0){
+            $row = mysqli_fetch_assoc($result);
+            $hashedPassword = $row["Password"];
+        }
+        if (password_verify($password, $hashedPassword)) {
+            setcookie("uname", $username, time()+3600, "/");
+            header("Location: ../user/dashboard.php");
+            exit();
+        } else {
+            $_SESSION['login_error'] = "Incorrect Password";
+            header("Location: ../user_login.php");
+            exit();
+        }
+
+    } else {
+        $_SESSION['login_error'] = "User not found";
+        header("Location: ../user_login.php");
+        exit();
+    }
+}
+?>
+
+===== END OF FILE =====
+
+==> actions/userregistrationhandler.php <===
+<?php
+// Database connection
+$conn = mysqli_connect("127.0.0.1", "root", "SQLroot@MySQL", "IRTLS");
+
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Prepare and bind
+$query = "INSERT INTO CommonUsers (UserID, Password, Name, EmailID, MobileNo, LicenseNo) VALUES (?, ?, ?, ?, ?, ?)";
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+    // Hash password for security
+    $hashedPassword = password_hash($_POST['password'], PASSWORD_DEFAULT);
+
+    mysqli_stmt_bind_param($stmt, "ssssss",
+        $_POST['username'],
+        $hashedPassword,
+        $_POST['fullname'],
+        $_POST['email'],
+        $_POST['mobile'],
+        $_POST['licence']
+    );
+
+    if (mysqli_stmt_execute($stmt)) {
+        echo "Registration successful! <a href='../user_login.php'>Login here</a>";
+    } else {
+        echo "Error: " . mysqli_stmt_error($stmt);
+    }
+    mysqli_stmt_close($stmt);
+} else {
+    echo "Error preparing statement: " . mysqli_error($conn);
+}
+
+mysqli_close($conn);
+?>
+
+===== END OF FILE =====
+
+==> actions/user_logout.php <===
+<?php
+session_start();
+if ($_COOKIE['uname']) {
+    setcookie("uname", '', time()-3600, "/");
+}
+$newURL = "/irlts/home.php";
+header('Location: '.$newURL);
+?>
+
+===== END OF FILE =====
+
+==> admin/admin_login.php <===
+<?php
+session_start();
+$error = isset($_SESSION['login_error']) ? $_SESSION['login_error'] : '';
+unset($_SESSION['login_error']); // Clear the error after displaying
+?>
+
+<?php include "../commonassets/header.php"; ?>
+    <h1>Admin Login</h1>
+    <br>
+    <form action="../actions/admin/adminloginhandler.php" method="POST">
+     <?php if (!empty($error)): ?>
+        <p style="color: red; text-align: center;"><?php echo htmlspecialchars($error); ?></p>
+    <?php endif; ?>
+    <table>
+        <tr>
+            <td colspan="2">
+                <h2>Enter your credentials to log in</h2>
+            </td>
+        </tr>
+        <tr>
+            <td>Username</td>
+            <td><input type="text" name="username" required></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td>Password</td>
+            <td><input type="password" name="password" required></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td colspan="2" class="center">
+                <input type="submit" value="Login">
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2" class="center">
+                <a href="forgot_password.php">Forgot Password?</a> |
+                <a href="admin_registration.php">Register</a>
+            </td>
+        </tr>
+    </table>
+    </form>
+<?php include "../commonassets/footer.php"; ?>
+
+<style>
+form {
+    background: #fff;
+    padding: 20px;
+    padding-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 600px;
+}
+
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+input[type="submit"] {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    height: 56px;
+    font-size: 20px;
+}
+input[type="submit"]:hover {
+    background-color: #0056b3;
+}
+
+.center {
+    text-align: center;
+}
+
+a {
+    color: #003366;
+    text-decoration: none;
+    font-size: 16px;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+</style>
+
+===== END OF FILE =====
+
+==> admin/admin_registration.php <===
+<?php include "../commonassets/header.php"; ?>
+    <h1>Admin Registration</h1>
+    <br>
+
+    <form action="../actions/admin/adminregistrationhandler.php" method="POST">
+        <table>
+            <tr>
+                <td>Full Name:</td>
+                <td><input type="text" name="fullname" required></td>
+            </tr>
+            <tr>
+                <td>Username:</td>
+                <td><input type="text" name="username" required></td>
+            </tr>
+            <tr>
+                <td>Password:</td>
+                <td><input type="password" name="password" required></td>
+            </tr>
+            <tr>
+            <tr>
+                <td>Authority Type:</td>
+                <td><select name="authority_type">
+                    <option value="RTO">RTO</option>
+                    <option value="Pollution">Pollution Centre</option>
+                    <option value="Insurer">Insurer</option>
+                </select></td>
+            </tr>
+        </table>
+        <input type="submit" value="Register">
+    </form>
+<?php include "../commonassets/footer.php"; ?>
+<style>
+form {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 600px;
+}
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+input[type="submit"] {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    height: 56px;
+    font-size: 20px;
+}
+input[type="submit"]:hover {
+    background-color: #0056b3;
+}
+</style>
+
+===== END OF FILE =====
+
+==> admin/insurer/insurance_info.php <===
+<?php include "../../commonassets/header.php"; ?>
+    <div class="content">
+    <h1>Insurance Information</h1>
+    <br>
+    <form action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post">
+    <div class="upperbox">
+    <div class="basicdetails">
+      <h2> Basic Details</h2>
+    <table>
+        <tr>
+            <td>Vehicle Registration Number</td>
+            <td><input type="text" name="RegisterNo"></td>
+        </tr>
+        <tr>
+            <td>Registration Authority</td>
+            <td><input type="text" name="RegistrationAuthority"></td>
+        </tr>
+        <tr>
+            <td>Customer ID</td>
+            <td><input type="number" name="CustomerID"></td>
+        </tr>
+    </table>
+    </div>
+    <br>
+  <div class="policydetails">
+   <h2>Policy Details</h2>
+    <table>
+        <tr>
+            <td>Policy Issuer</td>
+            <td><input type="text" name="PolicyIssuer"></td>
+        </tr>
+        <tr>
+            <td>Financier Name</td>
+            <td><input type="text" name="FinancierName"></td>
+        </tr>
+        <tr>
+            <td>Package Name</td>
+            <td><input type="text" name="PackageName"></td>
+        </tr>
+        <tr>
+            <td>Insured Declared Value</td>
+            <td><input type="number" name="InsureDeclared"></td>
+        </tr>
+        <tr>
+            <td>Premium To Be Paid (Total)</td>
+            <td><input type="number" name="PremiumTBP"></td>
+        </tr>
+        <tr>
+            <td>Start Date of Policy</td>
+            <td><input type="date" name="IssueDate"></td>
+        </tr>
+        <tr>
+            <td>End Date of Policy</td>
+            <td><input type="date" name="EndDate"></td>
+        </tr>
+        <tr>
+            <td>Receipt Number</td>
+            <td><input type="number" name="ReceiptNo"></td>
+        </tr>
+        <tr>
+            <td>Policy Number</td>
+            <td><input type="number" name="PolicyNo"></td>
+        </tr>
+    </table>
+</div>
+    </div>
+   <div class="lowerbox">
+    <h2>Contact Information</h2>
+    <div class="lefttbox">
+    <br>
+    <h3>Policy Issuing Office</h3>
+    <table>
+        <tr>
+            <td style="vertical-align: top;">Address</td>
+            <td><textarea name="PIO_Addr"></textarea></td>
+        </tr>
+        <tr>
+            <td>Contact Number</td>
+            <td><input type="number" name="PIO_No"></td>
+        </tr>
+        <tr>
+            <td>Email</td>
+            <td><input type="email" name="PIO_Email"></td>
+        </tr>
+    </table>
+</div>
+ <div class="rightbox">
+    <br>
+    <h3>Claim Contact</h3>
+    <table>
+        <tr>
+            <td style="vertical-align: top;">Address</td>
+            <td><textarea name="CCName"></textarea></td>
+        </tr>
+        <tr>
+            <td>Contact Number</td>
+            <td><input type="number" name="CCNo"></td>
+        </tr>
+        <tr>
+            <td>Email</td>
+            <td><input type="email" name="CCEmail"></td>
+        </tr>
+    </table>
+</div>
+</div>
+    <input type="submit" value="Create Insurance Record">
+
+    </form>
+    </div>
+
+<?php include "../../commonassets/footer.php"; ?>
+
+<?php
+// Connect to MySQL
+$conn = mysqli_connect("127.0.0.1", "root", "SQLroot@MySQL", "IRTLS");
+
+// Check connection
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+
+// Prepare SQL query (fixed columns and placeholders)
+$query = "INSERT INTO InsuranceDetails
+(PolicyNo, PolicyIssuer, CustomerID, ReceiptNo, ClaimContact, RegistrationAuthority, FinancierName, RegisterNo, PremiumTBP, InsureDeclared, IssueDate, EndDate, PackageName)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+// Prepare the statement
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+    // Concatenate necessary values before binding
+    $policyIssuer = $_POST['PIO_Addr'] . " " . $_POST['PIO_Email'] . " " . $_POST['PIO_No']; // Policy Issuer
+    $claimContact = $_POST['CCName'] . " " . $_POST['CCEmail'] . " " . $_POST['CCNo']; // Claim Contact
+
+    // Bind parameters to prevent SQL injection
+    mysqli_stmt_bind_param($stmt, "ssssssssddsss",
+        $_POST['PolicyNo'],          // i (integer)
+        $policyIssuer,               // s (string)
+        $_POST['CustomerID'],        // i (integer)
+        $_POST['ReceiptNo'],         // s (string)
+        $claimContact,               // s (string)
+        $_POST['RegistrationAuthority'], // s (string)
+        $_POST['FinancierName'],     // s (string)
+        $_POST['RegisterNo'],        // s (string)
+        $_POST['PremiumTBP'],        // d (double)
+        $_POST['InsureDeclared'],    // d (double)
+        $_POST['IssueDate'],         // s (string)
+        $_POST['EndDate'],           // s (string)
+        $_POST['PackageName']        // s (string)
+    );
+
+    // Execute the query
+    if (mysqli_stmt_execute($stmt)) {
+        echo "Done";
+    } else {
+        echo "Error: " . mysqli_stmt_error($stmt);
+    }
+
+    // Close the statement
+    mysqli_stmt_close($stmt);
+} else {
+    echo "Error preparing statement: " . mysqli_error($conn);
+}
+
+// Close the connection
+mysqli_close($conn);
+?>
+
+===== END OF FILE =====
+
+==> admin/rto/complaints.php <===
+<?php
+    $conn = mysqli_connect("localhost","root","SQLroot@MySQL","IRTLS");
+    $username = $_COOKIE['uname'];
+// -------------------------------------------------------------
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $registerno = $_POST["registerno"];
+    $violatorlno = $_POST["violatorlno"];
+    $offenses = $_POST["offenses"];
+    $fineamt = $_POST["fineamt"];
+    $location = $_POST["location"];
+    $dtime = date('Y-m-d H:i:s');
+    echo $violatorlno;
+
+    $query = "SELECT * FROM OwnedBy WHERE RegisterNo='$registerno'";
+    $result = mysqli_query($conn, $query);
+    if (mysqli_num_rows($result)>0){
+        $row = mysqli_fetch_assoc($result);
+        $ownerinfo = $row['LicenseNo'];
+    }
+
+    $sql = "INSERT INTO Violations (DateAndTime, RegisterNo, OwnerInfo, ViolatorInfo, Offenses, Fine, PlaceOfIncident)
+        VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    $stmt = mysqli_prepare($conn, $sql);
+
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, "sssssis", $dtime, $registerno, $ownerinfo, $violatorlno, $offenses, $fineamt, $location);
+
+        if (mysqli_stmt_execute($stmt)) {
+            $successMessage = "Violation added successfully!";
+        } else {
+            $errorMessage = "Error: " . mysqli_error($conn);
+        }
+
+        mysqli_stmt_close($stmt);
+    } else {
+        $errorMessage = "Error preparing statement: " . mysqli_error($conn);
+    }
+}
+
+// -------------------------------------------------------------
+    $queryPendingComplaints = "SELECT *
+                       FROM Complaints
+                       WHERE Status = 'PENDING'";
+    $resultPendingComplaints = mysqli_query($conn, $queryPendingComplaints);
+
+    // Unpaid violations query
+    $queryUnderInvestigation = "SELECT * FROM Complaints WHERE Status = 'UNDER INVESTIGATION'";
+    $resultUnderInvestigation = mysqli_query($conn, $queryUnderInvestigation);
+
+    $queryResolved = "SELECT * FROM Complaints WHERE Status = 'RESOLVED'";
+    $resultResolved = mysqli_query($conn, $queryResolved);
+?>
+
+<?php include "../../commonassets/header.php"; ?>
+<h1>Registered Complaints</h1>
+
+<!-- Pending Complaints Table -->
+<div id="pendingComplaints" class="info-box">
+    <h2>Pending Action</h2>
+    <h3>Click on any complaints to move it to Under Investigation</h3>
+    <?php if (mysqli_num_rows($resultPendingComplaints) > 0): ?>
+        <table border="1">
+            <tr><th>Complaint ID</th><th>Date & Time</th><th>Registration No</th><th>Description</th><th>Location</th><th>Complainee Contact</th></tr>
+            <?php while ($row = mysqli_fetch_assoc($resultPendingComplaints)): ?>
+                <tr onclick="ComplaintsAction(<?php echo $row['ComplaintID']?>, 'UNDER INVESTIGATION')">
+                    <td><?php echo $row['ComplaintID']; ?></td>
+                    <td><?php echo $row['DateTime']; ?></td>
+                    <td><?php echo $row['RegisterNo']; ?></td>
+                    <td><?php echo $row['Description']; ?></td>
+                    <td><?php echo $row['Location']; ?></td>
+                    <td><?php echo $row['ComplaineeContact']; ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No pending complaints found.</p>
+    <?php endif; ?>
+</div>
+
+<!-- Under Investigation Table -->
+<div id="underInvestigation" class="info-box">
+    <h2>Under Investigation</h2>
+    <h3>Click on any complaints to mark it as resolved</h3>
+    <?php if (mysqli_num_rows($resultUnderInvestigation) > 0): ?>
+        <table border="1">
+            <tr><th>Complaint ID</th><th>Date & Time</th><th>Registration No</th><th>Description</th><th>Location</th><th>Complainee Contact</th></tr>
+            <?php while ($row = mysqli_fetch_assoc($resultUnderInvestigation)): ?>
+                <tr onclick="ComplaintsAction(<?php echo $row['ComplaintID']?>, 'RESOLVED')">
+                    <td><?php echo $row['ComplaintID']; ?></td>
+                    <td><?php echo $row['DateTime']; ?></td>
+                    <td><?php echo $row['RegisterNo']; ?></td>
+                    <td><?php echo $row['Description']; ?></td>
+                    <td><?php echo $row['Location']; ?></td>
+                    <td><?php echo $row['ComplaineeContact']; ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No complaints under investigation found.</p>
+    <?php endif; ?>
+</div>
+
+<!-- Completed Table -->
+<button id="resolvedComplaintsbtn">Show Resolved Complaints</button>
+<div id="resolvedComplaints" class="info-box">
+    <h2>Resolved</h2>
+    <?php if (mysqli_num_rows($resultResolved) > 0): ?>
+        <table border="1">
+            <tr><th>Complaint ID</th><th>Date & Time</th><th>Registration No</th><th>Description</th><th>Location</th><th>Complainee Contact</th></tr>
+            <?php while ($row = mysqli_fetch_assoc($resultResolved)): ?>
+                <tr>
+                    <td><?php echo $row['ComplaintID']; ?></td>
+                    <td><?php echo $row['DateTime']; ?></td>
+                    <td><?php echo $row['RegisterNo']; ?></td>
+                    <td><?php echo $row['Description']; ?></td>
+                    <td><?php echo $row['Location']; ?></td>
+                    <td><?php echo $row['ComplaineeContact']; ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No resolved complaints.</p>
+    <?php endif; ?>
+</div>
+<script>
+    document.getElementById("resolvedComplaintsbtn").addEventListener("click", function() {
+    var form = document.getElementById("resolvedComplaints");
+    if (form.style.display === "none" || form.style.display === "") {
+        form.style.display = "block";
+        this.textContent = "Hide Resolved Complaints";
+    } else {
+        form.style.display = "none";
+        this.textContent = "Show Resolved Complaints";
+    }
+});
+    function ComplaintsAction(ComplaintID, status) {
+        var myret = confirm("Do you want to set the selected complaint as '" + status + "'?\nComplaint Number: " + ComplaintID);
+        if (myret === true) {
+            let formData = new FormData();
+            formData.append('complaintID', ComplaintID);
+            formData.append('status', status);
+            fetch("/irlts/actions/admin/complaintmgmt.php", {
+              method: "POST",
+              body: formData
+            });
+        }
+        location.reload(true);
+        return false;
+    }
+</script>
+
+<?php include "../../commonassets/footer.php"; ?>
+
+<style>
+h3 {
+    font-size: 16px;
+    margin: 8px;
+}
+form {
+    margin-top: 24px;
+    margin-bottom: 20px;
+}
+
+label {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#resolvedComplaints{
+    display: none;
+}
+
+#resolvedComplaintsbtn{
+    margin-top: 36px;
+    margin-left: 9%;
+    margin-bottom: 16px;
+}
+
+select {
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.info-box {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: left;
+    max-width: 80%;
+    margin: auto;
+    margin-top: 32px;
+    display: block;
+}
+
+button {
+    padding: 10px 15px;
+    font-size: 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+#toggleFormButton{
+    margin-left: 23%;
+    margin-top: 24px;
+}
+</style>
+
+===== END OF FILE =====
+
+==> admin/rto/dashboard.php <===
+<?php include "../../commonassets/header.php"; ?>
+<?php
+    session_start();
+    $username = $_COOKIE['uname'];
+    $conn = mysqli_connect("127.0.0.1","root","SQLroot@MySQL","IRTLS");
+    $query = "SELECT * FROM Administrator WHERE UserID='$username'";
+    $result = mysqli_query($conn, $query);
+
+    if (mysqli_num_rows($result)>0) {
+        $row = mysqli_fetch_assoc($result);
+        if ($row['AuthorityType'] == 'Insurer') {
+            header("Location: ../insurer/insurance_info.php");
+            exit();
+        }
+        elseif ($row['AuthorityType'] == 'Pollution') {
+            header("Location: ../testingcentre/vehicle_pollution.php");
+            exit();
+        }
+        elseif ($row['AuthorityType'] == 'RTO') {
+        }
+        else{
+            header("Location: ../../admin/admin_login.php");
+            exit();
+        }
+}
+?>
+
+    <h1>RTO Dashboard</h1>
+    <p style="padding-left: 24px;">Welcome to your dashboard! Here you can access all your transport-related information.</p>
+    <br>
+
+    <div class="dashboard-container">
+        <div class="dashboard-box">
+            <img src="icons/vehicle.png" alt="Vehicle">
+            <h2>Vehicle Registration</h2>
+            <p>Register new vehicles.</p>
+            <a href="vehicleregistration.php" class="more-btn">More</a>
+        </div>
+
+        <div class="dashboard-box">
+            <img src="icons/violations.png" alt="Violations">
+            <h2>Traffic Violations</h2>
+            <p>File a new traffic violation.</p>
+            <a href="trafficviolations.php" class="more-btn">More</a>
+        </div>
+
+        <div class="dashboard-box">
+            <img src="icons/license.png" alt="License">
+            <h2>License Registration</h2>
+            <p>Register new driver's license.</p>
+            <a href="newlicense.php" class="more-btn">More</a>
+        </div>
+
+        <div class="dashboard-box">
+            <img src="icons/complaints.png" alt="Complaints">
+            <h2>Complaints Management</h2>
+            <p>See complaints filed against your vehicle.</p>
+            <a href="complaints.php" class="more-btn">More</a>
+        </div>
+    </div>
+<?php include "../../commonassets/footer.php"; ?>
+
+<style>
+/* Dashboard Container */
+.dashboard-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+/* Dashboard Boxes */
+.dashboard-box {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 250px;
+    max-width: 100%;
+}
+.dashboard-box img {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 10px;
+}
+.dashboard-box h2 {
+    font-size: 18px;
+    color: #000;
+    margin-bottom: 10px;
+}
+.dashboard-box p {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 10px;
+}
+.more-btn {
+    display: inline-block;
+    background: #007bff;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 14px;
+}
+.more-btn:hover {
+    background: #0056b3;
+}
+</style>
+
+===== END OF FILE =====
+
+==> admin/rto/newlicense.php <===
+<?php
+$successMessage = "";
+$errorMessage = "";
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $licenseNo = $_POST["licenseNo"];
+    $name = $_POST["name"];
+    $authorizedVehicleClasses = $_POST["authorizedVehicleClasses"];
+    $dateOfIssue = $_POST["dateOfIssue"];
+    $dateOfBirth = $_POST["dateOfBirth"];
+    $permanentAddress = $_POST["permanentAddress"];
+    $presentAddress = $_POST["presentAddress"];
+    $swd = $_POST["swd"];
+    $bloodGroup = $_POST["bloodGroup"];
+
+    // Database Connection
+    $conn = mysqli_connect("127.0.0.1","root","SQLroot@MySQL","IRTLS");
+
+    if (!$conn) {
+        die("Connection failed: " . mysqli_connect_error());
+    }
+
+    $sql = "INSERT INTO DriverInfo (LicenseNo, Name, AuthorizedVehicleClasses, DateOfIssue, DateOfBirth, PermanentAddress, PresentAddress, SWD, BloodGroup) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    $stmt = mysqli_prepare($conn, $sql);
+
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, "ssissssss", $licenseNo, $name, $authorizedVehicleClasses, $dateOfIssue, $dateOfBirth, $permanentAddress, $presentAddress, $swd, $bloodGroup);
+
+        if (mysqli_stmt_execute($stmt)) {
+            $successMessage = "Driver added successfully!";
+        } else {
+            $errorMessage = "Error: " . mysqli_error($conn);
+        }
+
+        mysqli_stmt_close($stmt);
+    } else {
+        $errorMessage = "Error preparing statement: " . mysqli_error($conn);
+    }
+
+    mysqli_close($conn);
+}
+?>
+
+<?php include "../../commonassets/header.php"; ?>
+    <h1 style="padding-top: 16px;">Add New Driver</h1>
+    <h2 style="padding-top: 12px; padding-left: 32px;">Enter driver details to register them in the system.</h2>
+
+    <?php if (!empty($successMessage)) echo "<h3 class='success' style='padding-left: 32px;'>$successMessage</h3>"; ?>
+    <?php if (!empty($errorMessage)) echo "<h3 class='error' style='padding-left: 32px;'>$errorMessage</h3>"; ?>
+
+    <form method="POST" action="newlicense.php">
+        <table>
+            <tr>
+                <td><label for="licenseNo">License Number:</label></td>
+                <td><input type="text" id="licenseNo" name="licenseNo" required></td>
+            </tr>
+            <tr>
+                <td><label for="name">Full Name:</label></td>
+                <td><input type="text" id="name" name="name" required></td>
+            </tr>
+            <tr>
+                <td><label for="authorizedVehicleClasses">Authorized Vehicle Classes:</label></td>
+                <td><input type="number" id="authorizedVehicleClasses" name="authorizedVehicleClasses" required></td>
+            </tr>
+            <tr>
+                <td><label for="dateOfIssue">Date of Issue:</label></td>
+                <td><input type="date" id="dateOfIssue" name="dateOfIssue" required></td>
+            </tr>
+            <tr>
+                <td><label for="dateOfBirth">Date of Birth:</label></td>
+                <td><input type="date" id="dateOfBirth" name="dateOfBirth" required></td>
+            </tr>
+            <tr>
+                <td><label for="permanentAddress">Permanent Address:</label></td>
+                <td><textarea id="permanentAddress" name="permanentAddress" required></textarea></td>
+            </tr>
+            <tr>
+                <td><label for="presentAddress">Present Address:</label></td>
+                <td><textarea id="presentAddress" name="presentAddress" required></textarea></td>
+            </tr>
+            <tr>
+                <td><label for="swd">Son/Wife/Daughter of:</label></td>
+                <td><input type="text" id="swd" name="swd" required></td>
+            </tr>
+            <tr>
+                <td><label for="bloodGroup">Blood Group:</label></td>
+                <td><select id="bloodGroup" name="bloodGroup" required>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                </select></td>
+            </tr>
+        </table>
+        <br><br>
+        <button type="submit">Add Driver</button>
+    </form>
+<?php include "../../commonassets/footer.php"; ?>
+
+===== END OF FILE =====
+
+==> admin/rto/trafficviolations.php <===
+<?php
+    $conn = mysqli_connect("localhost","root","SQLroot@MySQL","IRTLS");
+    $username = $_COOKIE['uname'];
+// -------------------------------------------------------------
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $registerno = $_POST["registerno"];
+    $violatorlno = $_POST["violatorlno"];
+    $offenses = $_POST["offenses"];
+    $fineamt = $_POST["fineamt"];
+    $location = $_POST["location"];
+    $dtime = date('Y-m-d H:i:s');
+    echo $violatorlno;
+
+    $query = "SELECT * FROM OwnedBy WHERE RegisterNo='$registerno'";
+    $result = mysqli_query($conn, $query);
+    if (mysqli_num_rows($result)>0){
+        $row = mysqli_fetch_assoc($result);
+        $ownerinfo = $row['LicenseNo'];
+    }
+
+    $sql = "INSERT INTO Violations (DateAndTime, RegisterNo, OwnerInfo, ViolatorInfo, Offenses, Fine, PlaceOfIncident)
+        VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    $stmt = mysqli_prepare($conn, $sql);
+
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, "sssssis", $dtime, $registerno, $ownerinfo, $violatorlno, $offenses, $fineamt, $location);
+
+        if (mysqli_stmt_execute($stmt)) {
+            $successMessage = "Violation added successfully!";
+        } else {
+            $errorMessage = "Error: " . mysqli_error($conn);
+        }
+
+        mysqli_stmt_close($stmt);
+    } else {
+        $errorMessage = "Error preparing statement: " . mysqli_error($conn);
+    }
+}
+
+// -------------------------------------------------------------
+    // Paid fines query (join Violations and FinesPaid)
+    $queryPaidFines = "SELECT v.ViolationNo, v.DateAndTime, v.RegisterNo, v.Fine, f.DateTime AS PaymentDate, f.ReceiptNo
+                       FROM Violations v
+                       JOIN FinesPaid f ON v.ViolationNo = f.ViolationNo
+                       WHERE v.RegisterNo IN ('$vehicleList')";
+    $resultPaidFines = mysqli_query($conn, $queryPaidFines);
+
+    // Unpaid violations query
+    $queryUnpaidViolations = "SELECT * FROM Violations WHERE ViolationNo NOT IN (SELECT ViolationNo FROM FinesPaid)";
+    $resultUnpaidViolations = mysqli_query($conn, $queryUnpaidViolations);
+?>
+
+<?php include "../../commonassets/header.php"; ?>
+<h1>Traffic Violations</h1>
+
+<button id="toggleFormButton">File New Violation</button>
+<form method="POST" action="trafficviolations.php" id="violationForm" style="display: none;">
+    <table>
+        <tr>
+            <td><label for="registerno">Registration Number:</label></td>
+            <td><input type="text" name="registerno" required></td>
+        </tr>
+        <tr>
+            <td><label for="violatorlno">Violator License Number:</label></td>
+            <td><input type="text" name="violatorlno" required></td>
+        </tr>
+        <tr>
+            <td><label for="offenses">Offenses:</label></td>
+            <td><input type="text" name="offenses" required></td>
+        </tr>
+        <tr>
+            <td><label for="fineamt">Fine Amount:</label></td>
+            <td><input type="text" name="fineamt" required></td>
+        </tr>
+        <tr>
+            <td><label for="location">Location of Incident:</label></td>
+            <td><input type="text" name="location" required></td>
+        </tr>
+    </table>
+    <br><br>
+    <button type="submit">Add Violation</button>
+</form>
+
+<!-- Paid Fines Table -->
+<div id="paidFines" class="info-box">
+    <h2>Paid Fines</h2>
+    <?php if (mysqli_num_rows($resultPaidFines) > 0): ?>
+        <table border="1">
+            <tr><th>Violation No</th><th>Date & Time</th><th>Registration No</th><th>Fine</th><th>Payment Date</th><th>Receipt No</th></tr>
+            <?php while ($row = mysqli_fetch_assoc($resultPaidFines)): ?>
+                <tr>
+                    <td><?php echo $row['ViolationNo']; ?></td>
+                    <td><?php echo $row['DateAndTime']; ?></td>
+                    <td><?php echo $row['RegisterNo']; ?></td>
+                    <td><?php echo $row['Fine']; ?></td>
+                    <td><?php echo $row['PaymentDate']; ?></td>
+                    <td><?php echo $row['ReceiptNo']; ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No paid fines found.</p>
+    <?php endif; ?>
+</div>
+
+<!-- Unpaid Violations Table -->
+<div id="unpaidViolations" class="info-box">
+    <h2>Unpaid Violations</h2>
+    <?php if (mysqli_num_rows($resultUnpaidViolations) > 0): ?>
+        <table border="1">
+            <tr><th>Violation No</th><th>Date & Time</th><th>Registration No</th><th>Violator License</th><th>Fine</th><th>Place of Incident</th></tr>
+            <?php while ($row = mysqli_fetch_assoc($resultUnpaidViolations)): ?>
+                <tr>
+                    <td><?php echo $row['ViolationNo']; ?></td>
+                    <td><?php echo $row['DateAndTime']; ?></td>
+                    <td><?php echo $row['RegisterNo']; ?></td>
+                    <td><?php echo $row['ViolatorInfo']; ?></td>
+                    <td><?php echo $row['Fine']; ?></td>
+                    <td><?php echo $row['PlaceOfIncident']; ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </table>
+    <?php else: ?>
+        <p>No unpaid violations found.</p>
+    <?php endif; ?>
+</div>
+
+<?php include "../../commonassets/footer.php"; ?>
+
+<style>
+form {
+    margin-top: 24px;
+    margin-bottom: 20px;
+}
+
+label {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+select {
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.info-box {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: left;
+    max-width: 800px;
+    margin: auto;
+    margin-top: 32px;
+    display: block;
+}
+
+button {
+    padding: 10px 15px;
+    font-size: 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+#toggleFormButton{
+    margin-left: 23%;
+    margin-top: 24px;
+}
+</style>
+
+<script>
+// JavaScript to toggle the visibility of the "File New Violation" form
+document.getElementById("toggleFormButton").addEventListener("click", function() {
+    var form = document.getElementById("violationForm");
+    if (form.style.display === "none" || form.style.display === "") {
+        form.style.display = "block";
+        this.textContent = "Hide Form";
+    } else {
+        form.style.display = "none";
+        this.textContent = "File New Violation";
+    }
+});
+</script>
+
+===== END OF FILE =====
+
+==> admin/rto/vehicleregistration.php <===
+<?php include "../../commonassets/header.php"; ?>
+    <h1>Vehicle Registration</h1>
+    <br>
+
+    <form action="actions/vehicleregistrationhandler.php" method="POST">
+        <h2>Basic Information</h2>
+        <table>
+            <tr>
+                <td>Registration Number</td>
+                <td><input type="text" name="register_no" required></td>
+            </tr>
+            <tr>
+                <td>Class of Vehicle</td>
+                <td><input type="text" name="class_of_vehicle" required></td>
+            </tr>
+            <tr>
+                <td>Maker Name</td>
+                <td><input type="text" name="maker_name" required></td>
+            </tr>
+            <tr>
+                <td>Model Name</td>
+                <td><input type="text" name="model_name" required></td>
+            </tr>
+            <tr>
+                <td>License of Registered Owner</td>
+                <td><input type="text" name="licence_owner" required></td>
+            </tr>
+        </table>
+
+        <br><br>
+        <h2>Vehicle Description</h2>
+        <table>
+            <tr>
+                <td>Colour of Vehicle</td>
+                <td><input type="text" name="vehicle_colour" required></td>
+            </tr>
+            <tr>
+                <td>Seating Capacity</td>
+                <td><input type="number" name="seating_capacity" required></td>
+            </tr>
+            <tr>
+                <td>Body Type</td>
+                <td><input type="text" name="body_type" required></td>
+            </tr>
+            <tr>
+                <td>Month and Year of Manufacture</td>
+                <td><input type="date" name="make_month_year" required></td>
+            </tr>
+            <tr>
+                <td>Chassis Number</td>
+                <td><input type="text" name="chassis_no" required></td>
+            </tr>
+            <tr>
+                <td>Engine Number</td>
+                <td><input type="text" name="engine_no" required></td>
+            </tr>
+            <tr>
+                <td>Unladen Weight (kg)</td>
+                <td><input type="number" name="unladen_weight" required></td>
+            </tr>
+            <tr>
+                <td>Cubic Capacity (cc)</td>
+                <td><input type="number" name="cubic_capacity" required></td>
+            </tr>
+            <tr>
+                <td>Number of Cylinders</td>
+                <td><input type="number" name="no_of_cylinders" required></td>
+            </tr>
+            <tr>
+                <td>Fuel Type</td>
+                <td>
+                    <select name="fuel_type">
+                        <option>Diesel</option>
+                        <option>Petrol</option>
+                        <option>Electric</option>
+                        <option>Hybrid</option>
+                        <option>CNG</option>
+                        <option>LPG</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td>Emission Norms</td>
+                <td>
+                    <select name="emission_norms_stage" style="width:60%;">
+                        <option>Bharat Stage</option>
+                        <option>Euro</option>
+                    </select>
+                    <select name="emission_norms_level" style="width:38.7%;">
+                        <option>1</option>
+                        <option>2</option>
+                        <option>3</option>
+                        <option>4</option>
+                        <option>5</option>
+                        <option>6</option>
+                    </select>
+                </td>
+            </tr>
+        </table>
+
+        <br>
+        <input type="submit" value="Register Vehicle">
+    </form>
+<?php include "../../commonassets/footer.php"; ?>
+
+===== END OF FILE =====
+
+==> admin/testingcentre/vehicle_pollution.php <===
+<?php include "../../commonassets/header.php"; ?>
+
+    <br><br><br><br><br>
+    <h1>Pollution Certification Information</h1>
+    <br>
+
+    <form action="../../actions/admin/pollutioncertificate_issue.php" method="POST">
+        <h2>Basic Information</h2>
+        <table>
+            <tr>
+                <td>Registration Number:</td>
+                <td><input type="text" name="register_no" required></td>
+            </tr>
+            <tr>
+                <td>Testing Center Code:</td>
+                <td><input type="number" name="testcode" required></td>
+            </tr>
+        </table>
+
+        <br><br>
+        <h2>Test Results</h2>
+        <br>
+
+        <table>
+            <tr>
+                <th>IDLE RPM</th>
+                <th>MAX RPM</th>
+                <th>OIL TEMP</th>
+                <th>K VALUE</th>
+            </tr>
+            <tr>
+                <td><input type="text" name="idle_rpm1" required></td>
+                <td><input type="text" name="max_rpm1" required></td>
+                <td><input type="text" name="oil_temp1" required></td>
+                <td><input type="text" name="k_value1" required></td>
+            </tr>
+            <tr>
+                <td><input type="text" name="idle_rpm2"></td>
+                <td><input type="text" name="max_rpm2"></td>
+                <td><input type="text" name="oil_temp2"></td>
+                <td><input type="text" name="k_value2"></td>
+            </tr>
+            <tr>
+                <td><input type="text" name="idle_rpm3"></td>
+                <td><input type="text" name="max_rpm3"></td>
+                <td><input type="text" name="oil_temp3"></td>
+                <td><input type="text" name="k_value3"></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td></td>
+                <td><b>AVERAGE:</b></td>
+                <td id="avg_k_value">0</td>
+            </tr>
+            <tr>
+                <td>RESULT</td>
+                <td>
+                    <select name="result">
+                        <option value="PASS">PASS</option>
+                        <option value="FAIL">FAIL</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td>Fee charged:</td>
+                <td><input type="number" name="fees" required></td>
+            </tr>
+        </table>
+        <br><br>
+        <input type="submit" value="Certify">
+    </form>
+
+    <script>
+        // Auto Calculate Average K Value
+        document.addEventListener("input", function() {
+            let k1 = parseFloat(document.querySelector("[name='k_value1']").value) || 0;
+            let k2 = parseFloat(document.querySelector("[name='k_value2']").value) || 0;
+            let k3 = parseFloat(document.querySelector("[name='k_value3']").value) || 0;
+
+            let count = 0;
+            if (k1 > 0) count++;
+            if (k2 > 0) count++;
+            if (k3 > 0) count++;
+
+            let avg = count > 0 ? (k1 + k2 + k3) / count : 0;
+            document.getElementById("avg_k_value").innerText = avg.toFixed(2);
+        });
+    </script>
+
+<?php include "../../commonassets/footer.php"; ?>
+
+===== END OF FILE =====
+
+==> combi.sh <===
+#!/bin/bash
+
+# Output file where the combined content will be written
+output_file="combined_output.txt"
+
+# Clear the output file if it exists, or create a new one
+> "$output_file"
+
+# Loop through all files recursively from the current directory
+find . -type f | while read -r file; do
+    # Skip Zone.Identifier files and image files (jpg, jpeg, png, gif)
+    if [[ "$file" =~ :Zone.Identifier$ ]] || [[ "$file" =~ \.(jpg|jpeg|png|gif|bmp|tiff|svg|webp)$ ]]; then
+        continue
+    fi
+
+    # Get the relative path of the file
+    relative_path="${file#./}"
+    echo "$relative_path"
+
+    # Write the formatted header and file contents into the output file
+    echo "==> $relative_path <===" >> "$output_file"
+    cat "$file" >> "$output_file"
+    echo -e "\n===== END OF FILE =====\n" >> "$output_file"
+done
+
+
+===== END OF FILE =====
+
+==> combined_output.txt <===
+
+===== END OF FILE =====
+
+==> commonassets/footer.php <===
+<footer>
+        <div class="container">
+            <p>&copy; 2025 Integrated Road Transport and Licensing System | IRTLS</p>
+        </div>
+    </footer>
+
+</body>
+</html>
+
+===== END OF FILE =====
+
+==> commonassets/header.php <===
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="/irlts/commonassets/style.css">
+</head>
+<body>
+<header>
+    <div class="container">
+        <h1>Integrated Road Transport and Licensing System</h1>
+        <nav>
+            <ul>
+                <li><a href="/irlts/home.php">Home</a></li>
+                <li><a href="/irlts/about_us.php">About</a></li>
+                <li><a href="/irlts/contact_us.php">Contact</a></li>
+                <?php
+                    if (!($_COOKIE['uname'])){
+                        echo '<li><a href="/irlts/user_login.php">User Login</a></li>';
+                    }
+                    else{
+                        echo '<li><a href="/irlts/actions/user_logout.php">Logout</a></li>';
+                    }
+                ?>
+            </ul>
+        </nav>
+    </div>
+</header>
+
+===== END OF FILE =====
+
+==> commonassets/style.css <===
+/* General Styles */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+}
+
+h1 {
+    text-align: center;
+}
+h2 {
+    font-size: 26px;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+}
+
+h3 {
+    font-size: 22px;
+    border-bottom: 2px;
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+}
+
+/* Header */
+header {
+    background: #2c3e50;
+    color: white;
+    padding: 15px 0;
+    text-align: center;
+}
+
+header .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+}
+
+nav ul {
+    list-style: none;
+    padding: 0;
+}
+
+nav ul li {
+    display: inline;
+    margin-right: 15px;
+}
+
+nav ul li a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+/*Table and Form Styling*/
+form {
+    background: #fff;
+    padding: 20px;
+    padding-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 800px;
+}
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+textarea {
+    width: 100%;
+    height: 96px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    resize: none;
+}
+
+table input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+table input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+table select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+table select:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+input[type="submit"] {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    height: 56px;
+    font-size: 20px;
+}
+input[type="submit"]:hover {
+    background-color: #0056b3;
+}
+table tr td:last-child {
+    padding-right: 10px;
+}
+
+/* Footer */
+footer {
+    background: #34495e;
+    color: white;
+    text-align: center;
+    padding: 15px 0;
+    margin-top: 20px;
+}
+
+===== END OF FILE =====
+
+==> contact_us.php <===
+<?php include "commonassets/header.php"; ?>
+    <div class="content">
+        <h1>Contact Us</h1>
+        <p>If you face any technical issues or need assistance, feel free to reach out to us using the following contact details.</p>
+
+        <table>
+            <tr>
+                <th>Problem Area</th>
+                <th>Email ID</th>
+                <th>Contact Number</th>
+                <th>Timings</th>
+            </tr>
+            <tr>
+                <td>Vehicle registration, fitness, Tax, Permit, Fancy, Dealer etc</td>
+                <td>helpdesk-vahan@gov.in</td>
+                <td rowspan="4">+91-120-4925505</td>
+                <td rowspan="4">06:00 AM - 12:00 Midnight</td>
+            </tr>
+            <tr>
+                <td>Learner License, Driving Licence etc</td>
+                <td>helpdesk-sarathi@gov.in</td>
+            </tr>
+            <tr>
+                <td>mParivahan Related</td>
+                <td>helpdesk-mparivahan@gov.in</td>
+            </tr>
+            <tr>
+                <td>eChallan Related</td>
+                <td>helpdesk-echallan@gov.in</td>
+            </tr>
+        </table>
+    </div>
+<?php include "commonassets/footer.php"; ?>
+<style>
+    .content {
+    padding-top: 24px;
+    padding-left: 10%;
+    padding-right: 10%;
+    padding-bottom: 24px;
+    text-align: justify;
+}
+
+.content h1 {
+    text-align: center;
+    font-size: 32px;
+    color: #003366;
+    margin-bottom: 20px;
+}
+
+/* Table styling */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 10px;
+    text-align: left;
+}
+
+th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+
+td {
+    font-size: 18px;
+}
+
+</style>
+
+===== END OF FILE =====
+
+==> filecomplaint.php <===
+<?php include "commonassets/header.php"; ?>
+    <h1>File a Complaint</h1>
+    <br>
+    <form action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post">
+    <table>
+        <tr>
+            <td colspan="2">
+                <h2>Fill out the below form to file a complaint against a vehicle</h2>
+            </td>
+        </tr>
+        <tr>
+            <td>Complainee Contact Number</td>
+            <td><input type="number" name="contact"></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td>Date of Incident</td>
+            <td><input type="date" name="doi"></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td style="vertical-align: top;">Location of Incident</td>
+            <td><textarea name="loc"></textarea></td>
+        </tr>
+        <tr>
+            <td>Register Number of the Vehicle</td>
+            <td><input type="text" name="reg"></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td style="vertical-align: top;">Description of Incident</td>
+            <td><textarea name="desc"></textarea></td>
+        </tr>
+    </table>
+    <input type="submit" value="File Complaint">
+    </form>
+<?php include "commonassets/footer.php"; ?>
+
+
+<?php
+    $contact = $_POST['contact'];
+    $doi = $_POST['doi'];
+    $loc = $_POST['loc'];
+    $reg = $_POST['reg'];
+    $desc = $_POST['desc'];
+
+    $query = "INSERT INTO Complaints (ComplaineeContact, DateTime, Location, RegisterNo, Description, Status) VALUES($contact,'$doi','$loc','$reg','$desc','PENDING');";
+    $conn = mysqli_connect("127.0.0.1","root","SQLroot@MySQL","IRTLS");
+    mysqli_query($conn, $query);
+    echo "Done";
+?>
+
+===== END OF FILE =====
+
+==> home.php <===
+<?php include "commonassets/header.php"; ?>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h2>Efficient. Transparent. Integrated.</h2>
+            <p>Manage your vehicle registrations, licenses, insurance, and violations all in one place.</p>
+            <a href="user_login.php" class="btn">Access Your Account</a>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2>Key Features</h2>
+            <div class="feature-list">
+                <div class="feature" onclick="location.replace('user_login.php')">
+                    <h3>For Users</h3>
+                    <ul>
+                        <li>View vehicle & license details</li>
+                        <li>Check & renew insurance & certificates</li>
+                        <li>Manage fines & violations</li>
+                        <li>View complaints against your vehicle</li>
+                    </ul>
+                </div>
+                <div class="feature" onclick="location.replace('admin/admin_login.php')">
+                    <h3>For Authorities</h3>
+                    <ul>
+                        <li>Register vehicles & drivers</li>
+                        <li>Track & enforce penalties</li>
+                        <li>Manage complaints & violations</li>
+                        <li>Ensure real-time data accuracy</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Call to Action -->
+    <section class="cta">
+        <div class="container">
+            <h2>File a complaint against rash driving?</h2>
+            <a href="filecomplaint.php" class="btn">Report Here!</a>
+        </div>
+    </section>
+
+<?php include "commonassets/footer.php"; ?>
+
+
+<style>
+    /* Hero Section */
+.hero {
+    background: url('road_background.png') no-repeat center center/cover;
+    height: 350px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: white;
+}
+
+.hero-content {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 20px;
+    border-radius: 10px;
+}
+
+.hero h2 {
+    font-size: 36px;
+}
+
+.hero p {
+    font-size: 18px;
+}
+
+.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.btn:hover {
+    background: #2980b9;
+}
+
+/* Features Section */
+.features {
+    padding: 40px 20px;
+    background: white;
+    text-align: center;
+}
+
+.feature-list {
+    display: flex;
+    justify-content: center;
+    gap: 50px;
+}
+
+.feature {
+    background: #ecf0f1;
+    padding: 20px;
+    border-radius: 10px;
+    width: 250px;
+}
+
+.feature h3 {
+    color: #2c3e50;
+}
+
+.feature ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.feature ul li {
+    padding: 5px 0;
+}
+
+/* Call to Action */
+.cta {
+    background: #2c3e50;
+    color: white;
+    padding: 40px;
+    text-align: center;
+}
+
+.cta .btn {
+    margin: 10px;
+}
+
+.admin-btn {
+    background: #e74c3c;
+}
+
+.admin-btn:hover {
+    background: #c0392b;
+}
+</style>
+
+===== END OF FILE =====
+
+==> user/complaints.php <===
+<?php include "../commonassets/header.php"; ?>
+    <h1>Complaints Against Your Vehicles</h1>
+    <div id="table_view">
+    <?php
+        $conn = mysqli_connect("localhost","root","SQLroot@MySQL","IRTLS");
+        $username = $_COOKIE['uname'];
+
+        $query = "SELECT * FROM CommonUsers WHERE UserID='$username'";
+        $result = mysqli_query($conn, $query);
+        if (mysqli_num_rows($result)>0){
+            $row = mysqli_fetch_assoc($result);
+            $LicenseNo = $row["LicenseNo"];
+        }
+
+        $query = "SELECT RegisterNo FROM OwnedBy WHERE LicenseNo='$LicenseNo'";
+        $result = mysqli_query($conn, $query);
+        $vehicles = array_column(mysqli_fetch_all($result, MYSQLI_ASSOC), "RegisterNo");
+
+        // Convert the array of vehicle RegisterNos into a comma-separated string
+        $vehicleList = implode("','", array_map(function($vehicle) use ($conn) {
+            return mysqli_real_escape_string($conn, $vehicle);
+            }, $vehicles));
+
+        // Add single quotes around the vehicle IDs for SQL syntax and add the IN clause
+        $query = "SELECT * FROM Complaints WHERE RegisterNo IN ('$vehicleList')";
+        $result = mysqli_query($conn, $query);
+
+
+
+
+        // Display Complaints Against User's Vehicles
+        if (!empty($vehicles)) {
+            if (mysqli_num_rows($result) > 0) {
+                echo "<table border='1'>";
+                echo "<tr><th>Complaint ID</th><th>Vehicle No</th><th>Date & Time</th><th>Location</th><th>Description</th><th>Status</th></tr>";
+                while ($row = mysqli_fetch_assoc($result)) {
+                    echo "<tr>";
+                    echo "<td>" . $row["ComplaintID"] . "</td>";
+                    echo "<td>" . $row["RegisterNo"] . "</td>";
+                    echo "<td>" . $row["DateTime"] . "</td>";
+                    echo "<td>" . $row["Location"] . "</td>";
+                    echo "<td>" . $row["Description"] . "</td>";
+                    echo "<td>" . $row["Status"] . "</td>";
+                    echo "</tr>";
+                }
+                echo "</table>";
+            } else {
+                echo "<p>No complaints found against your vehicles.</p>";
+            }
+        } else {
+            echo "<p>You do not own any registered vehicles.</p>";
+        }
+    ?>
+</div>
+<?php include "../commonassets/footer.php"; ?>
+
+
+<style>
+    #table_view {
+    background: #fff;
+    margin-top: 96px;
+    margin: 32px;
+    padding: 64px;
+    padding-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 90%;
+}
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+textarea {
+    width: 100%;
+    height: 96px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    resize: none;
+}
+
+table input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+table input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+table select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+table select:focus {
+    border-color: #007bff;
+    outline: none;
+}
+</style>
+
+===== END OF FILE =====
+
+==> user/dashboard.php <===
+<?php include "../commonassets/header.php"; ?>
+    <h1>User Dashboard</h1>
+    <p style="padding-left: 24px;">Welcome to your dashboard! Here you can access all your transport-related information.</p>
+    <br>
+
+    <div class="dashboard-container">
+        <div class="dashboard-box">
+            <img src="icons/vehicle.png" alt="Vehicle">
+            <h2>Vehicle Information</h2>
+            <p>View details of your registered vehicles.</p>
+            <a href="vehicleinfo.php" class="more-btn">More</a>
+        </div>
+
+        <div class="dashboard-box">
+            <img src="icons/violations.png" alt="Violations">
+            <h2>Traffic Violations</h2>
+            <p>Check your pending traffic violations and fines.</p>
+            <a href="violations.php" class="more-btn">More</a>
+        </div>
+
+        <div class="dashboard-box">
+            <img src="icons/license.png" alt="License">
+            <h2>Driver's License</h2>
+            <p>View details of your driver's license.</p>
+            <a href="driverinfo.php" class="more-btn">More</a>
+        </div>
+
+        <div class="dashboard-box">
+            <img src="icons/complaints.png" alt="Complaints">
+            <h2>Filed Complaints</h2>
+            <p>See complaints filed against your vehicle.</p>
+            <a href="complaints.php" class="more-btn">More</a>
+        </div>
+    </div>
+<?php include "../commonassets/footer.php"; ?>
+
+<style>
+/* Dashboard Container */
+.dashboard-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+/* Dashboard Boxes */
+.dashboard-box {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 250px;
+    max-width: 100%;
+}
+.dashboard-box img {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 10px;
+}
+.dashboard-box h2 {
+    font-size: 18px;
+    color: #000;
+    margin-bottom: 10px;
+}
+.dashboard-box p {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 10px;
+}
+.more-btn {
+    display: inline-block;
+    background: #007bff;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 14px;
+}
+.more-btn:hover {
+    background: #0056b3;
+}
+</style>
+
+===== END OF FILE =====
+
+==> user/driverinfo.php <===
+<?php include "../commonassets/header.php"; ?>
+    <br><br>
+    <div id="table_view">
+    <?php
+        $conn = mysqli_connect("localhost","root","SQLroot@MySQL","IRTLS");
+        $username = $_COOKIE['uname'];
+
+        $query = "SELECT * FROM CommonUsers WHERE UserID='$username'";
+        $result = mysqli_query($conn, $query);
+        if (mysqli_num_rows($result)>0){
+            $row = mysqli_fetch_assoc($result);
+            $LicenseNo = $row["LicenseNo"];
+        }
+
+        $query = "SELECT * FROM DriverInfo WHERE LicenseNo='$LicenseNo'";
+        $result = mysqli_query($conn, $query);
+        if (mysqli_num_rows($result)>0){
+            $row = mysqli_fetch_assoc($result); // Fetch single row
+
+            echo "<table>";
+            echo "<tr><td><b>License No</b></td><td>" . $row["LicenseNo"] . "</td></tr>";
+            echo "<tr><td><b>Name</b></td><td>" . $row["Name"] . "</td></tr>";
+            echo "<tr><td><b>Authorized Vehicle Classes</b></td><td>" . $row["AuthorizedVehicleClasses"] . "</td></tr>";
+            echo "<tr><td><b>Date of Issue</b></td><td>" . $row["DateOfIssue"] . "</td></tr>";
+            echo "<tr><td><b>Date of Birth</b></td><td>" . $row["DateOfBirth"] . "</td></tr>";
+            echo "<tr><td><b>Permanent Address</b></td><td>" . $row["PermanentAddress"] . "</td></tr>";
+            echo "<tr><td><b>Present Address</b></td><td>" . $row["PresentAddress"] . "</td></tr>";
+            echo "<tr><td><b>Son/Wife/Daughter Of</b></td><td>" . $row["SWD"] . "</td></tr>";
+            echo "<tr><td><b>Blood Group</b></td><td>" . $row["BloodGroup"] . "</td></tr>";
+            echo "</table>";
+        } else {
+            echo "No records found for License No: " . htmlspecialchars($LicenseNo);
+        }
+    ?>
+</div>
+<?php include "../commonassets/footer.php"; ?>
+<style>
+    #table_view {
+    background: #fff;
+    margin-top: 96px;
+    margin: 64px;
+    padding: 20px;
+    padding-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 800px;
+}
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+textarea {
+    width: 100%;
+    height: 96px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    resize: none;
+}
+
+table input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+table input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+table select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+table select:focus {
+    border-color: #007bff;
+    outline: none;
+}
+</style>
+
+===== END OF FILE =====
+
+==> user/user_registration.php <===
+<?php include "../commonassets/header.php"; ?>
+    <h1>User Registration</h1>
+    <br>
+
+    <form action="../actions/userregistrationhandler.php" method="POST">
+        <table>
+            <tr>
+                <td>Full Name:</td>
+                <td><input type="text" name="fullname" required></td>
+            </tr>
+            <tr>
+                <td>Username:</td>
+                <td><input type="text" name="username" required></td>
+            </tr>
+            <tr>
+                <td>Password:</td>
+                <td><input type="password" name="password" required></td>
+            </tr>
+            <tr>
+                <td>Mobile No.:</td>
+                <td><input type="number" name="mobile" required></td>
+            </tr>
+            <tr>
+                <td>Email ID:</td>
+                <td><input type="email" name="email" required></td>
+            </tr>
+            <tr>
+                <td>Licence Number:</td>
+                <td><input type="text" name="licence" required></td>
+            </tr>
+        </table>
+        <input type="submit" value="Register">
+    </form>
+<?php include "../commonassets/footer.php"; ?>
+<style>
+form {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 600px;
+}
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+input[type="submit"] {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    height: 56px;
+    font-size: 20px;
+}
+input[type="submit"]:hover {
+    background-color: #0056b3;
+}
+</style>
+
+===== END OF FILE =====
+
+==> user/vehicleinfo.php <===
+<?php
+        $conn = mysqli_connect("localhost","root","SQLroot@MySQL","IRTLS");
+        $username = $_COOKIE['uname'];
+
+        $query = "SELECT * FROM CommonUsers WHERE UserID='$username'";
+        $result = mysqli_query($conn, $query);
+        if (mysqli_num_rows($result)>0){
+            $row = mysqli_fetch_assoc($result);
+            $LicenseNo = $row["LicenseNo"];
+        }
+
+        $query = "SELECT RegisterNo FROM OwnedBy WHERE LicenseNo='$LicenseNo'";
+        $result = mysqli_query($conn, $query);
+        $vehicles = array_column(mysqli_fetch_all($result, MYSQLI_ASSOC), "RegisterNo");
+
+        // Convert the array of vehicle RegisterNos into a comma-separated string
+        $vehicleList = implode("','", array_map(function($vehicle) use ($conn) {
+            return mysqli_real_escape_string($conn, $vehicle);
+            }, $vehicles));
+
+        // Add single quotes around the vehicle IDs for SQL syntax and add the IN clause
+        $query = "SELECT * FROM VehicleInfo WHERE RegisterNo IN ('$vehicleList')";
+        $result = mysqli_query($conn, $query);
+
+        $allvehicles = [];
+        while ($row = mysqli_fetch_assoc($result)) {
+            $allvehicles[] = $row;
+        }
+    ?>
+
+<?php include "../commonassets/header.php"; ?>
+    <h1>Vehicle Information</h1>
+    <p>Select a vehicle to view its details.</p>
+    <br>
+
+    <form>
+        <label for="vehicleSelect">Select Your Vehicle:</label>
+        <select id="vehicleSelect" name="vehicleSelect">
+            <option value="" disabled selected>Select a vehicle</option>
+            <?php foreach ($allvehicles as $vehicle): ?>
+                <option value="<?= $vehicle['RegisterNo'] ?>"><?= htmlspecialchars($vehicle['MakerName']) ?> <?= htmlspecialchars($vehicle['ModelName']) ?> (<?= htmlspecialchars($vehicle['RegisterNo']) ?>)</option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+
+    <br>
+
+    <!-- Vehicle Details -->
+    <div id="vehicleDetails" class="info-box">
+        <h2>Vehicle Details</h2>
+        <p><b>Registration Number:</b> <span id="vehicleReg">-</span></p>
+        <p><b>Maker Name:</b> <span id="vehicleMaker">-</span></p>
+        <p><b>Model Name:</b> <span id="vehicleModel">-</span></p>
+        <p><b>Body Type:</b> <span id="vehicleBodyType">-</span></p>
+        <p><b>Make Month & Year:</b> <span id="vehicleMakeMonthYear">-</span></p>
+        <p><b>Seating Capacity:</b> <span id="vehicleSeatingCapacity">-</span></p>
+        <p><b>Emission Norms:</b> <span id="vehicleEmissionNorms">-</span></p>
+        <p><b>Fuel:</b> <span id="vehicleFuel">-</span></p>
+        <p><b>Engine Number:</b> <span id="vehicleEngineNo">-</span></p>
+        <p><b>Class:</b> <span id="vehicleClass">-</span></p>
+        <p><b>Registration Validity:</b> <span id="vehicleRegistrationValidity">-</span></p>
+        <p><b>Date of Registration:</b> <span id="vehicleDateOfRegistration">-</span></p>
+        <p><b>Chassis Number:</b> <span id="vehicleChassisNo">-</span></p>
+        <p><b>Number of Cylinders:</b> <span id="vehicleNoOfCylinders">-</span></p>
+        <p><b>Colour:</b> <span id="vehicleColour">-</span></p>
+        <p><b>Cubic Capacity:</b> <span id="vehicleCubicCapacity">-</span></p>
+        <p><b>Unladen Weight:</b> <span id="vehicleUnladenWeight">-</span></p>
+    </div>
+
+    <div id="insureDetails" class="info-box">
+        <h2>Insurance Details</h2>
+        <p><b>Provider:</b> <span id="insuranceProvider">-</span></p>
+        <p><b>Policy Number:</b> <span id="insurancePolicy">-</span></p>
+        <p><b>Expiry Date:</b> <span id="insuranceExpiry">-</span></p>
+    </div>
+
+    <div id="pollutionDetails" class="info-box">
+        <h2>Pollution Details</h2>
+            <p><b>Certificate Number:</b> <span id="pollutionCert">-</span></p>
+            <p><b>Issued Date:</b> <span id="pollutionIssued">-</span></p>
+            <p><b>Expiry Date:</b> <span id="pollutionExpiry">-</span></p>
+    </div>
+
+    <script>
+        document.getElementById("vehicleSelect").addEventListener("change", function () {
+            let vehicleId = this.value;
+            if (vehicleId) {
+                fetch("../actions/fetch_vehicle_info.php?vehicle_id=" + vehicleId)
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById("vehicleReg").innerText = data.registration_no;
+                        document.getElementById("vehicleMaker").innerText = data.maker_name;
+                        document.getElementById("vehicleModel").innerText = data.model_name;
+                        document.getElementById("vehicleBodyType").innerText = data.body_type;
+                        document.getElementById("vehicleMakeMonthYear").innerText = data.make_month_year;
+                        document.getElementById("vehicleSeatingCapacity").innerText = data.seating_capacity;
+                        document.getElementById("vehicleEmissionNorms").innerText = data.emission_norms;
+                        document.getElementById("vehicleFuel").innerText = data.fuel;
+                        document.getElementById("vehicleEngineNo").innerText = data.engine_no;
+                        document.getElementById("vehicleClass").innerText = data.class;
+                        document.getElementById("vehicleRegistrationValidity").innerText = data.registration_validity;
+                        document.getElementById("vehicleDateOfRegistration").innerText = data.date_of_registration;
+                        document.getElementById("vehicleChassisNo").innerText = data.chassis_no;
+                        document.getElementById("vehicleNoOfCylinders").innerText = data.no_of_cylinders;
+                        document.getElementById("vehicleColour").innerText = data.colour;
+                        document.getElementById("vehicleCubicCapacity").innerText = data.cubic_capacity;
+                        document.getElementById("vehicleUnladenWeight").innerText = data.unladen_weight;
+
+                        document.getElementById("insuranceProvider").innerText = data.insurance_provider;
+                        document.getElementById("insurancePolicy").innerText = data.insurance_policy;
+                        document.getElementById("insuranceExpiry").innerText = data.insurance_expiry;
+
+                        document.getElementById("pollutionCert").innerText = data.pollution_cert;
+                        document.getElementById("pollutionIssued").innerText = data.pollution_issued;
+                        document.getElementById("pollutionExpiry").innerText = data.pollution_expiry;
+                        
+                        document.getElementById("vehicleDetails").style.display = "block";
+                        document.getElementById("insureDetails").style.display = "block";
+                        document.getElementById("pollutionDetails").style.display = "block";
+                    })
+                    .catch(error => console.error("Error fetching vehicle details:", error));
+            }
+        });
+    </script>
+
+<?php include "../commonassets/footer.php"; ?>
+<style>
+form {
+    margin-bottom: 20px;
+}
+
+label {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+select {
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+/* Vehicle Details */
+.info-box {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: left;
+    max-width: 600px;
+    margin: auto;
+    margin-top: 32px;
+    display: none;
+}
+
+}
+</style>
+
+===== END OF FILE =====
+
+==> user/violations.php <===
+<?php include "../commonassets/header.php"; ?>
+<?php
+    // Existing connection to the database
+    $conn = mysqli_connect("localhost", "root", "SQLroot@MySQL", "IRTLS");
+    if (!$conn) {
+        die("<script>alert('Connection Failed')</script>");
+    }
+
+    $username = $_COOKIE['uname'];
+
+    // Get License Number of the user
+    $query = "SELECT LicenseNo FROM CommonUsers WHERE UserID='$username'";
+    $result = mysqli_query($conn, $query);
+    if ($row = mysqli_fetch_assoc($result)) {
+        $LicenseNo = $row["LicenseNo"];
+    } else {
+        die("No user found.");
+    }
+
+    // Get Vehicle(s) owned by the user
+    $vehicles = [];
+    $query = "SELECT RegisterNo FROM OwnedBy WHERE LicenseNo='$LicenseNo'";
+    $result = mysqli_query($conn, $query);
+    while ($row = mysqli_fetch_assoc($result)) {
+        $vehicles[] = $row["RegisterNo"];
+    }
+
+    // Display Driver Violations
+    echo "<br><h2 style='text-align: left;'>Violations Committed by Driver</h2>";
+    $query = "SELECT * FROM Violations WHERE ViolatorInfo='$LicenseNo'";
+    $result = mysqli_query($conn, $query);
+
+    if (mysqli_num_rows($result) > 0) {
+        echo "<table border='1'>";
+        echo "<tr><th>Violation No</th><th>Date & Time</th><th>Offense</th><th>Fine</th><th>Location</th></tr>";
+        while ($row = mysqli_fetch_assoc($result)) {
+            echo "<tr>";
+            echo "<td>" . $row["ViolationNo"] . "</td>";
+            echo "<td>" . $row["DateAndTime"] . "</td>";
+            echo "<td>" . $row["Offenses"] . "</td>";
+            echo "<td>" . $row["Fine"] . "</td>";
+            echo "<td>" . $row["PlaceOfIncident"] . "</td>";
+            echo "</tr>";
+        }
+        echo "</table>";
+    } else {
+        echo "<p style='text-align: left;'>No violations found for the driver.</p>";
+    }
+
+    // Display Vehicle Violations
+    echo "<br><br><br><br><br><br><h2 style='text-align: left;'>Violations Committed by Vehicle(s)</h2>";
+    if (!empty($vehicles)) {
+        $vehicle_list = "'" . implode("','", $vehicles) . "'"; // Creating a list of owned vehicle registration numbers
+        $query = "SELECT * FROM Violations WHERE RegisterNo IN ($vehicle_list)"; // Querying violations for vehicles
+        $result = mysqli_query($conn, $query);
+
+        if (mysqli_num_rows($result) > 0) {
+            echo "<table border='1'>";
+            echo "<tr><th>Violation No</th><th>Vehicle No</th><th>Date & Time</th><th>Offense</th><th>Fine</th><th>Location</th></tr>";
+            while ($row = mysqli_fetch_assoc($result)) {
+                echo "<tr>";
+                echo "<td>" . $row["ViolationNo"] . "</td>";
+                echo "<td>" . $row["RegisterNo"] . "</td>";
+                echo "<td>" . $row["DateAndTime"] . "</td>";
+                echo "<td>" . $row["Offenses"] . "</td>";
+                echo "<td>" . $row["Fine"] . "</td>";
+                echo "<td>" . $row["PlaceOfIncident"] . "</td>";
+                echo "</tr>";
+            }
+            echo "</table>";
+        } else {
+            echo "<p style='text-align: left;'>No violations found for the user's vehicles.</p>";
+        }
+    } else {
+        echo "<p style='text-align: left;'>User does not own any registered vehicles.</p>";
+    }
+?>
+<?php include "../commonassets/footer.php"; ?>
+<style>
+form {
+    background: #fff;
+    padding: 20px;
+    padding-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 600px;
+}
+
+table {
+    width: 90%;
+    font-size: 18px;
+    margin: 48px;
+    border-collapse: collapse;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+</style>
+
+===== END OF FILE =====
+
+==> user_login.php <===
+<?php
+session_start();
+$error = isset($_SESSION['login_error']) ? $_SESSION['login_error'] : '';
+unset($_SESSION['login_error']); // Clear the error after displaying
+?>
+
+<?php include "commonassets/header.php"; ?>
+    <h1>User Login</h1>
+    <br>
+    <form action="actions/userloginhandler.php" method="POST">
+     <?php if (!empty($error)): ?>
+        <p style="color: red; text-align: center;"><?php echo htmlspecialchars($error); ?></p>
+    <?php endif; ?>
+    <table>
+        <tr>
+            <td colspan="2">
+                <h2>Enter your credentials to log in</h2>
+            </td>
+        </tr>
+        <tr>
+            <td>Username</td>
+            <td><input type="text" name="username" required></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td>Password</td>
+            <td><input type="password" name="password" required></td>
+        </tr>
+        <tr><td></td></tr>
+        <tr>
+            <td colspan="2" class="center">
+                <input type="submit" value="Login">
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2" class="center">
+                <a href="forgot_password.php">Forgot Password?</a> |
+                <a href="user/user_registration.php">Register</a>
+            </td>
+        </tr>
+    </table>
+    </form>
+<?php include "commonassets/footer.php"; ?>
+
+<style>
+form {
+    background: #fff;
+    padding: 20px;
+    padding-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    width: 80%;
+    max-width: 600px;
+}
+
+table {
+    width: 100%;
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+table td {
+    padding: 10px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+input[type="submit"] {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    height: 56px;
+    font-size: 20px;
+}
+input[type="submit"]:hover {
+    background-color: #0056b3;
+}
+
+.center {
+    text-align: center;
+}
+
+a {
+    color: #003366;
+    text-decoration: none;
+    font-size: 16px;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+</style>
+
+===== END OF FILE =====
+
